@@ -337,12 +337,14 @@ public class CustomOutputParser : IOutputParser
 - **Lazy Loading**: Test definitions loaded on-demand
 
 ### Execution Optimization
-- **Parallel Execution**: Support for concurrent test execution
+- **Lean Execution Path**: Minimal per-step overhead for fast feedback
 - **Connection Pooling**: Efficient resource utilization for network protocols
 - **Caching**: Intelligent caching of parsed configurations and compiled expressions
+- **Lazy Loading**: Load only what is needed for the current suite
 
-### Scalability Features
-- **Horizontal Scaling**: Framework designed for distributed execution
+### Scalability Considerations (Current Scope)
+- **Single-Process Runner**: Designed for efficient execution within one process
+- **CI-Level Parallelism**: Split suites across CI jobs for parallel runs outside the runner
 - **Resource Isolation**: Clean separation between test contexts
 - **Graceful Degradation**: Robust error handling with partial failure support
 

@@ -37,26 +37,25 @@ graph TB
 ### Performance Data Model
 
 ```csharp
-public class StepPerformanceData
+// What the framework actually exposes per step
+public class ExecutionResult
 {
-    // Core timing metrics
-    public long ExecutionTimeMs { get; set; }
-    public long AssertionTimeMs { get; set; }
     public DateTime StartTime { get; set; }
     public DateTime EndTime { get; set; }
-    
-    // Protocol-specific metrics
-    public long NetworkTimeMs { get; set; }
-    public long ProcessingTimeMs { get; set; }
-    public long SerializationTimeMs { get; set; }
-    
-    // Resource utilization
-    public long MemoryUsageBytes { get; set; }
-    public double CpuUsagePercent { get; set; }
-    
-    // Custom metrics for extensibility
-    public Dictionary<string, object> CustomMetrics { get; set; }
+    public long ExecutionTimeMs { get; set; }
+    public long AssertionTimeMs { get; set; }
+    public string StepType { get; set; }
 }
+
+// These metrics are surfaced into the TestContext so you can assert them via JPath:
+// $curStep:performance.executionTimeMs
+// $curStep:performance.assertionTimeMs
+// $curStep:performance.startTime
+// $curStep:performance.endTime
+// $curStep:performance.stepType
+
+// In addition, some step types publish protocol-specific metrics via $curStep:performanceData.*
+// (e.g., for message bus steps: publishTimeMs, subscribeTimeMs, messageSize).
 ```
 
 ---
@@ -225,45 +224,18 @@ Steps:
 
 ---
 
-## 🏗️ Scalability Architecture
+## 🏗️ Scalability Considerations (Current Scope)
 
-### Horizontal Scaling Design
+This framework runs as a single-process test runner. Scalability today means:
+- Running suites efficiently within one process
+- Keeping per-step overhead minimal (capturing timing data without heavy instrumentation)
+- Allowing data-driven batches via tables/repeaters to cover large scenarios
 
-```mermaid
-graph TB
-    subgraph "Load Balancer"
-        LB[Test Distribution Layer]
-    end
-    
-    subgraph "Test Execution Nodes"
-        N1[Node 1<br/>TestRunner Instance]
-        N2[Node 2<br/>TestRunner Instance]
-        N3[Node 3<br/>TestRunner Instance]
-        N4[Node N<br/>TestRunner Instance]
-    end
-    
-    subgraph "Shared Resources"
-        DB[(Test Results DB)]
-        FS[Shared File System]
-        MQ[Message Queue]
-    end
-    
-    LB --> N1
-    LB --> N2
-    LB --> N3
-    LB --> N4
-    
-    N1 --> DB
-    N2 --> DB
-    N3 --> DB
-    N4 --> DB
-    
-    N1 --> FS
-    N2 --> FS
-    N3 --> FS
-    N4 --> FS
-```
+What is intentionally not claimed here:
+- No built-in distributed execution across nodes
+- No cluster manager or load balancer integration
 
+If you need parallelism, use OS/process-level parallel runs (e.g., split suites across CI jobs) — the runner’s output is designed to be aggregatable by external tooling.
 ### Memory Optimization Strategies
 
 ```csharp
@@ -361,94 +333,45 @@ public class AsyncTestExecutor
 
 ## 📈 Performance Monitoring & Analytics
 
-### Real-Time Performance Dashboard
+The runner exposes per-step metrics (executionTimeMs, assertionTimeMs, start/end time, stepType) into the TestContext. You can:
+- Assert thresholds directly in YAML (e.g., executionTimeMs under a target)
+- Emit machine-readable outputs (e.g., JUnit/XML/JSON) via your pipeline scripts
+- Post-process the collected metrics to produce dashboards in your preferred tool (e.g., Grafana, Power BI)
 
-The framework generates **interactive HTML reports** with comprehensive performance analytics:
+Example assertion:
 
-```html
-<!-- Performance Dashboard Features -->
-<div class="performance-dashboard">
-    <!-- Test Execution Timeline -->
-    <div class="timeline-chart">
-        <canvas id="executionTimeline"></canvas>
-    </div>
-    
-    <!-- Performance Metrics Grid -->
-    <div class="metrics-grid">
-        <div class="metric-card">
-            <h3>Response Time Distribution</h3>
-            <canvas id="responseTimeHistogram"></canvas>
-        </div>
-        
-        <div class="metric-card">
-            <h3>Throughput Analysis</h3>
-            <canvas id="throughputChart"></canvas>
-        </div>
-        
-        <div class="metric-card">
-            <h3>Error Rate Trends</h3>
-            <canvas id="errorRateChart"></canvas>
-        </div>
-    </div>
-    
-    <!-- Performance Regression Analysis -->
-    <div class="regression-analysis">
-        <table class="performance-comparison">
-            <thead>
-                <tr>
-                    <th>Metric</th>
-                    <th>Current</th>
-                    <th>Baseline</th>
-                    <th>Change</th>
-                    <th>Status</th>
-                </tr>
-            </thead>
-            <tbody id="regressionData">
-                <!-- Dynamic content -->
-            </tbody>
-        </table>
-    </div>
-</div>
+```yaml
+Asserters:
+  - AssertLt:
+      JPathExpr: "$curStep:performance.executionTimeMs"
+      ConstExpr: 800
+      ErrorMessage: "Step should complete within 800ms"
 ```
 
----
-
-## 🎯 Enterprise Scalability Features
-
-### 1. **Distributed Test Execution**
-- Support for running tests across multiple nodes
-- Automatic load balancing and work distribution
-- Fault tolerance with automatic failover
-
-### 2. **Resource Management**
-- Connection pooling for network protocols
-- Memory-efficient streaming for large datasets
-- Automatic garbage collection optimization
-
-### 3. **Performance Optimization**
-- JIT compilation for expression evaluation
-- Caching of compiled test definitions
-- Lazy loading of test resources
-
-### 4. **Monitoring & Observability**
-- Real-time performance metrics
-- Distributed tracing support
-- Custom metrics collection
 
 ---
 
-## 📊 Benchmark Results
+## 🎯 Operational Considerations
 
-### Framework Performance Characteristics
+- Resource Management: Use connection pooling where applicable; avoid expensive per-step allocations
+- Performance Optimization: Cache compiled expressions/config where safe; prefer lazy loading
+- Observability: Log execution timings and assertion failures; export results for CI reporting
+- Parallelization: Run multiple suites in parallel at the job level (outside the runner) if needed
+---
 
-| Metric | Value | Notes |
-|--------|-------|-------|
-| **Test Execution Overhead** | < 5ms per step | Minimal framework overhead |
-| **Memory Efficiency** | < 50MB base usage | Scales linearly with test complexity |
-| **Concurrent Test Limit** | 1000+ tests | Limited by system resources |
-| **Large Dataset Processing** | 1GB+ files | Streaming processing support |
-| **Network Protocol Support** | HTTP/gRPC/MBus | Extensible protocol framework |
+## 📊 How To Measure Performance Yourself
+
+Rather than quoting synthetic benchmarks, this project encourages measuring in your environment:
+
+1) Add threshold assertions to critical steps
+- Assert executionTimeMs (and protocol-specific metrics if available)
+
+2) Capture results in CI
+- Export JSON/JUnit and retain as build artifacts
+
+3) Track regressions
+- Compare current metrics to a saved baseline using a simple script step
 
 ---
 
-*This performance and scalability analysis demonstrates the framework's readiness for enterprise-grade testing scenarios with sophisticated monitoring, optimization, and scaling capabilities.*
+This section focuses on actionable guidance so results are reproducible and relevant to your workload.
