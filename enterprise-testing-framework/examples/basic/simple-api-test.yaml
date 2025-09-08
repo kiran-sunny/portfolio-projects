@@ -1,0 +1,102 @@
+# Simple API Test Example
+# Demonstrates basic HTTP testing capabilities
+
+Name: "Simple API Integration Test"
+Description: "Basic example showing HTTP request testing with assertions"
+
+Variables:
+  baseUrl: "https://httpbin.org"
+  timeout: 5000
+
+Steps:
+  - Name: "Test GET Request"
+    Description: "Simple GET request with response validation"
+    Type: "http"
+    Input:
+      Method: "GET"
+      RequestUri: "{{$var:baseUrl}}/get"
+      Headers:
+        User-Agent: "TestRunner/1.0"
+        Accept: "application/json"
+    
+    Output:
+      Format: "json"
+      Store:
+        responseData: "output.content.json"
+        statusCode: "output.statusCode"
+    
+    Asserters:
+      # Functional assertions
+      - AssertEq:
+          JPathExpr: "$curStep:output.statusCode"
+          ConstExpr: 200
+          ErrorMessage: "Should return HTTP 200 OK"
+      
+      - AssertNotNull:
+          JPathExpr: "$var:responseData.headers"
+          ErrorMessage: "Response should contain headers"
+      
+      # Performance assertions
+      - AssertLt:
+          JPathExpr: "$curStep:performance.executionTimeMs"
+          ConstExpr: "{{$var:timeout}}"
+          ErrorMessage: "Response time should be under 5 seconds"
+
+  - Name: "Test POST Request"
+    Description: "POST request with JSON body"
+    Type: "http"
+    Input:
+      Method: "POST"
+      RequestUri: "{{$var:baseUrl}}/post"
+      Headers:
+        Content-Type: "application/json"
+        Accept: "application/json"
+      Body:
+        message: "Hello from TestRunner"
+        timestamp: "2024-01-01T00:00:00Z"
+        testData:
+          number: 42
+          boolean: true
+          array: [1, 2, 3]
+    
+    Output:
+      Format: "json"
+      Store:
+        postResponse: "output.content.json"
+    
+    Asserters:
+      - AssertEq:
+          JPathExpr: "$curStep:output.statusCode"
+          ConstExpr: 200
+          ErrorMessage: "POST should succeed"
+      
+      - AssertEq:
+          JPathExpr: "$var:postResponse.json.message"
+          ConstExpr: "Hello from TestRunner"
+          ErrorMessage: "Should echo the sent message"
+      
+      - AssertEq:
+          JPathExpr: "$var:postResponse.json.testData.number"
+          ConstExpr: 42
+          ErrorMessage: "Should preserve numeric values"
+
+  - Name: "Test Error Handling"
+    Description: "Demonstrates error handling and retry logic"
+    Type: "http"
+    Input:
+      Method: "GET"
+      RequestUri: "{{$var:baseUrl}}/status/404"
+    
+    Execution:
+      MaxRetries: 2
+      RetryDelayMs: 1000
+    
+    Output:
+      Store:
+        errorResponse: "output.statusCode"
+    
+    Asserters:
+      - AssertEq:
+          JPathExpr: "$var:errorResponse"
+          ConstExpr: 404
+          ErrorMessage: "Should return 404 as expected"

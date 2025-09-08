@@ -1,0 +1,310 @@
+# Advanced Microservices Integration Test
+# Demonstrates complex multi-protocol testing scenarios
+
+Name: "E2E Microservices Integration Test"
+Description: "Complex workflow testing across HTTP, gRPC, and Message Bus protocols"
+
+Variables:
+  apiGateway: "https://api.enterprise.com"
+  grpcService: "grpc.enterprise.com"
+  grpcPort: 50051
+  messageBus: "mbus.enterprise.com"
+  mbusPort: 5672
+  authToken: ""
+  userId: ""
+  orderId: ""
+
+Steps:
+  # Step 1: Authentication via API Gateway
+  - Name: "Authenticate User"
+    Description: "OAuth2 authentication flow"
+    Type: "http"
+    Input:
+      Method: "POST"
+      RequestUri: "{{$var:apiGateway}}/auth/oauth2/token"
+      Headers:
+        Content-Type: "application/x-www-form-urlencoded"
+        Accept: "application/json"
+      Body: "grant_type=client_credentials&client_id=test-client&client_secret=test-secret&scope=orders:write"
+    
+    Output:
+      Format: "json"
+      Store:
+        authToken: "output.content.json.access_token"
+        tokenType: "output.content.json.token_type"
+        expiresIn: "output.content.json.expires_in"
+    
+    Asserters:
+      - AssertEq:
+          JPathExpr: "$curStep:output.statusCode"
+          ConstExpr: 200
+          ErrorMessage: "Authentication should succeed"
+      
+      - AssertNotNull:
+          JPathExpr: "$var:authToken"
+          ErrorMessage: "Access token must be present"
+      
+      - AssertEq:
+          JPathExpr: "$var:tokenType"
+          ConstExpr: "Bearer"
+          ErrorMessage: "Token type should be Bearer"
+      
+      - AssertGt:
+          JPathExpr: "$var:expiresIn"
+          ConstExpr: 3600
+          ErrorMessage: "Token should be valid for at least 1 hour"
+
+  # Step 2: Create User Profile via REST API
+  - Name: "Create User Profile"
+    Description: "Create user profile for order processing"
+    Type: "http"
+    Input:
+      Method: "POST"
+      RequestUri: "{{$var:apiGateway}}/api/v1/users"
+      Headers:
+        Authorization: "{{$var:tokenType}} {{$var:authToken}}"
+        Content-Type: "application/json"
+        Accept: "application/json"
+      Body:
+        firstName: "John"
+        lastName: "Doe"
+        email: "john.doe@example.com"
+        preferences:
+          notifications: true
+          currency: "USD"
+          language: "en-US"
+    
+    Output:
+      Format: "json"
+      Store:
+        userId: "output.content.json.id"
+        userProfile: "output.content.json"
+    
+    Asserters:
+      - AssertEq:
+          JPathExpr: "$curStep:output.statusCode"
+          ConstExpr: 201
+          ErrorMessage: "User creation should succeed"
+      
+      - AssertNotNull:
+          JPathExpr: "$var:userId"
+          ErrorMessage: "User ID must be generated"
+      
+      - AssertEq:
+          JPathExpr: "$var:userProfile.email"
+          ConstExpr: "john.doe@example.com"
+          ErrorMessage: "Email should be preserved"
+
+  # Step 3: Create Order via gRPC Service
+  - Name: "Create Order via gRPC"
+    Description: "Create order using high-performance gRPC service"
+    Type: "rpc"
+    Input:
+      ProtoTypeName: "OrderService.CreateOrderRequest"
+      ServerIp: "{{$var:grpcService}}"
+      ServerPort: "{{$var:grpcPort}}"
+      Headers:
+        authorization: "{{$var:tokenType}} {{$var:authToken}}"
+        user-id: "{{$var:userId}}"
+      Body:
+        userId: "{{$var:userId}}"
+        orderItems:
+          - productId: "PROD-001"
+            productName: "Enterprise Software License"
+            quantity: 1
+            unitPrice: 999.99
+            category: "SOFTWARE"
+          - productId: "PROD-002"
+            productName: "Professional Support"
+            quantity: 12
+            unitPrice: 199.99
+            category: "SERVICE"
+        shippingAddress:
+          street: "123 Enterprise Blvd"
+          city: "Tech City"
+          state: "CA"
+          zipCode: "94105"
+          country: "USA"
+        paymentMethod:
+          type: "CREDIT_CARD"
+          cardNumber: "4111111111111111"
+          expiryMonth: 12
+          expiryYear: 2025
+    
+    Output:
+      Format: "protobuf"
+      Store:
+        orderId: "output.content.orderId"
+        orderTotal: "output.content.totalAmount"
+        orderStatus: "output.content.status"
+        estimatedDelivery: "output.content.estimatedDeliveryDate"
+    
+    Asserters:
+      - AssertEq:
+          JPathExpr: "$curStep:output.Error.Code"
+          ConstExpr: 0
+          ErrorMessage: "gRPC call should succeed"
+      
+      - AssertNotNull:
+          JPathExpr: "$var:orderId"
+          ErrorMessage: "Order ID must be generated"
+      
+      - AssertEq:
+          JPathExpr: "$var:orderTotal"
+          ConstExpr: 3399.87
+          ErrorMessage: "Order total should be calculated correctly (999.99 + 12*199.99)"
+      
+      - AssertEq:
+          JPathExpr: "$var:orderStatus"
+          ConstExpr: "PENDING"
+          ErrorMessage: "Initial order status should be PENDING"
+      
+      # Performance assertion for gRPC
+      - AssertLt:
+          JPathExpr: "$curStep:performance.executionTimeMs"
+          ConstExpr: 1000
+          ErrorMessage: "gRPC call should complete within 1 second"
+
+  # Step 4: Publish Order Event via Message Bus
+  - Name: "Publish Order Created Event"
+    Description: "Publish order creation event to message bus for downstream processing"
+    Type: "mbus"
+    Input:
+      ServerIp: "{{$var:messageBus}}"
+      ServerPort: "{{$var:mbusPort}}"
+      MessageType: "OrderCreatedEvent"
+      Exchange: "orders.events"
+      RoutingKey: "order.created"
+      Body:
+        eventId: "{{$var:orderId}}-created"
+        eventType: "ORDER_CREATED"
+        timestamp: "2024-01-01T12:00:00Z"
+        payload:
+          orderId: "{{$var:orderId}}"
+          userId: "{{$var:userId}}"
+          totalAmount: "{{$var:orderTotal}}"
+          status: "{{$var:orderStatus}}"
+          items: 2
+    
+    Output:
+      Store:
+        eventPublished: "output.success"
+        messageId: "output.messageId"
+    
+    Asserters:
+      - AssertEq:
+          JPathExpr: "$var:eventPublished"
+          ConstExpr: true
+          ErrorMessage: "Event should be published successfully"
+      
+      - AssertNotNull:
+          JPathExpr: "$var:messageId"
+          ErrorMessage: "Message ID should be returned"
+
+  # Step 5: Verify Order Processing via Polling
+  - Name: "Verify Order Processing"
+    Description: "Poll order status until processing is complete"
+    Type: "http"
+    Input:
+      Method: "GET"
+      RequestUri: "{{$var:apiGateway}}/api/v1/orders/{{$var:orderId}}"
+      Headers:
+        Authorization: "{{$var:tokenType}} {{$var:authToken}}"
+        Accept: "application/json"
+    
+    Execution:
+      MaxRetries: 10
+      RetryDelayMs: 2000
+      RetryUntil:
+        - AssertEq:
+            JPathExpr: "$curStep:output.content.json.status"
+            ConstExpr: "CONFIRMED"
+    
+    Output:
+      Format: "json"
+      Store:
+        finalOrderStatus: "output.content.json.status"
+        processingTime: "output.content.json.processingTimeMs"
+        confirmationNumber: "output.content.json.confirmationNumber"
+    
+    Asserters:
+      - AssertEq:
+          JPathExpr: "$var:finalOrderStatus"
+          ConstExpr: "CONFIRMED"
+          ErrorMessage: "Order should be confirmed after processing"
+      
+      - AssertNotNull:
+          JPathExpr: "$var:confirmationNumber"
+          ErrorMessage: "Confirmation number should be generated"
+      
+      - AssertLt:
+          JPathExpr: "$var:processingTime"
+          ConstExpr: 30000
+          ErrorMessage: "Order processing should complete within 30 seconds"
+
+  # Step 6: Generate Integration Report
+  - Name: "Generate Integration Test Report"
+    Description: "Generate comprehensive test report with all collected data"
+    Type: "script"
+    Input:
+      Language: "python"
+      Parameters:
+        userId: "{{$var:userId}}"
+        orderId: "{{$var:orderId}}"
+        orderTotal: "{{$var:orderTotal}}"
+        finalStatus: "{{$var:finalOrderStatus}}"
+        confirmationNumber: "{{$var:confirmationNumber}}"
+        processingTime: "{{$var:processingTime}}"
+      Script: |
+        import json
+        import os
+        from datetime import datetime
+        
+        # Collect all test data
+        test_data = {
+            "testExecutionId": f"E2E-{datetime.now().strftime('%Y%m%d-%H%M%S')}",
+            "testType": "MICROSERVICES_INTEGRATION",
+            "executionTimestamp": datetime.now().isoformat(),
+            "results": {
+                "authentication": "SUCCESS",
+                "userCreation": "SUCCESS",
+                "orderCreation": "SUCCESS",
+                "eventPublishing": "SUCCESS",
+                "orderProcessing": "SUCCESS"
+            },
+            "businessData": {
+                "userId": os.environ.get('userId'),
+                "orderId": os.environ.get('orderId'),
+                "orderTotal": float(os.environ.get('orderTotal', '0')),
+                "finalStatus": os.environ.get('finalStatus'),
+                "confirmationNumber": os.environ.get('confirmationNumber'),
+                "processingTimeMs": int(os.environ.get('processingTime', '0'))
+            },
+            "performance": {
+                "totalTestDuration": "calculated_by_framework",
+                "averageStepDuration": "calculated_by_framework",
+                "protocolBreakdown": {
+                    "http_requests": 3,
+                    "grpc_calls": 1,
+                    "message_bus_operations": 1
+                }
+            },
+            "summary": {
+                "testPassed": True,
+                "criticalPath": "AUTH -> USER_CREATE -> ORDER_CREATE -> EVENT_PUBLISH -> ORDER_CONFIRM",
+                "businessValue": f"Successfully processed order worth ${float(os.environ.get('orderTotal', '0')):.2f}"
+            }
+        }
+        
+        print("RESULT_JSON:" + json.dumps(test_data, indent=2))
+    
+    Output:
+      Format: "text"
+      Store:
+        integrationReport: "output.output"
+    
+    Asserters:
+      - AssertEq:
+          JPathExpr: "$curStep:output.exitCode"
+          ConstExpr: 0
+          ErrorMessage: "Report generation should succeed"
