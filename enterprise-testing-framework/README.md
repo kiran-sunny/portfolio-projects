@@ -71,14 +71,22 @@ Steps:
 ---
 
 ## Explore the docs
-- Technical architecture → ./docs/TECHNICAL_ARCHITECTURE.md
-- Implementation examples → ./docs/IMPLEMENTATION_EXAMPLES.md
-- Performance & scalability (grounded) → ./docs/PERFORMANCE_SCALABILITY.md
-- API & extension points → ./docs/API_REFERENCE.md
+- [Technical architecture](./docs/TECHNICAL_ARCHITECTURE.md)
+- [Implementation examples](./docs/IMPLEMENTATION_EXAMPLES.md)
+- [Performance & scalability (grounded)](./docs/PERFORMANCE_SCALABILITY.md)
+- [API & extension points](./docs/API_REFERENCE.md)
 
 Examples:
-- Basic HTTP → ./examples/basic/simple-api-test.yaml
-- Advanced E2E → ./examples/advanced/microservices-integration.yaml
+- [Basic HTTP](./examples/basic/simple-api-test.yaml)
+- [Advanced E2E](./examples/advanced/microservices-integration.yaml)
+
+
+## Tests (curated, sanitized)
+- Overview: [tests/README.md](./tests/README.md)
+- Unit tests folder: [tests/unit/src](./tests/unit/src)
+- Examples:
+  - Test context resolution: [TestContextResolveTests.cs](./tests/unit/src/TestContextResolveTests.cs)
+  - Performance data access: [PerformanceDataAccessTests.cs](./tests/unit/src/PerformanceDataAccessTests.cs)
 
 ---
 

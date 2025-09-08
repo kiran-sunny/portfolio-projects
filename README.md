@@ -6,8 +6,8 @@ A compact collection of work that shows how I design and ship pragmatic, enterpr
 
 ## Featured project
 
-### Enterprise YAML‑Based Testing Framework
-Location: ./enterprise-testing-framework/
+### [Enterprise YAML‑Based Testing Framework](./enterprise-testing-framework/)
+Location: [enterprise-testing-framework/](./enterprise-testing-framework/)
 
 Why it’s useful
 - Define tests in YAML (functional + performance)
@@ -16,9 +16,11 @@ Why it’s useful
 - CI‑friendly outputs for gating and reporting
 
 See
-- Project overview → ./enterprise-testing-framework/README.md
-- Examples → ./enterprise-testing-framework/examples/
-- Architecture → ./enterprise-testing-framework/docs/TECHNICAL_ARCHITECTURE.md
+- [Project overview](./enterprise-testing-framework/README.md)
+- [Examples](./enterprise-testing-framework/examples/)
+- [Architecture](./enterprise-testing-framework/docs/TECHNICAL_ARCHITECTURE.md)
+- [Tests (curated)](./enterprise-testing-framework/tests/)
+
 
 ---
 
